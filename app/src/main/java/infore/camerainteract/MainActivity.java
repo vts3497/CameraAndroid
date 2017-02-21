@@ -16,6 +16,8 @@ import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
+import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -31,12 +33,24 @@ import android.view.TextureView;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
+
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
+
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FilterOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.sql.Time;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -61,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
     protected CaptureRequest.Builder captureRequestBuilder;
     private Size imageDimension;
     private ImageReader imageReader;
-    private File file;
+    private InputStream  inputStream;
     private static final int REQUEST_CAMERA_PERMISSION = 200;
     private boolean mFlashSupported;
     private Handler mBackgroundHandler;
@@ -69,11 +83,10 @@ public class MainActivity extends AppCompatActivity {
     private int numOfPicturesAlreadyTaken = 0;
     private String timePictureTaken ;
     private final int delayTime = 2000;
-    private final int numOfPictures = 3;
-
+    private final int numOfPictures = 1;
+    private FTPClient ftpClient;
     public void takeTime() {
-        Date date = new Date();
-        timePictureTaken = date.toString();
+        timePictureTaken = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
     }
     public void takePictures(final int numOfPictures, final int delay) {
 
@@ -121,6 +134,10 @@ public class MainActivity extends AppCompatActivity {
                 takePictures(numOfPictures, delayTime);
             }
         });
+
+        ftpClient = new FTPClient();
+        new Connect().execute();
+
     }
     TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
@@ -162,7 +179,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
             super.onCaptureCompleted(session, request, result);
-            Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
+            Toast.makeText(MainActivity.this, "Saved:", Toast.LENGTH_SHORT).show();
             createCameraPreview();
         }
     };
@@ -210,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
             int rotation = getWindowManager().getDefaultDisplay().getRotation();
             captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS.get(rotation));
             takeTime();
-            final File file = new File(Environment.getExternalStorageDirectory()+"/" + timePictureTaken + ".jpg");
+            //final File file = new File(Environment.getExternalStorageDirectory()+"/" + timePictureTaken + ".jpg");
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader reader) {
@@ -220,38 +237,40 @@ public class MainActivity extends AppCompatActivity {
                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                         byte[] bytes = new byte[buffer.capacity()];
                         buffer.get(bytes);
-                        save(bytes);
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                        inputStream = new ByteArrayInputStream(bytes);
+//                        Environment.getExternalStorageDirectory()+"/" + timePictureTaken + ".jpg"
+                        new Thread(){
+                            @Override
+                            public void run() {
+                                //super.run();
+                                try {
+
+                                    ftpClient.storeFile("anh.jpeg",inputStream);
+                                    Log.e(TAG,"sending anh");
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+
+
+                            }
+                        }.start();
+                        //OutputStream op = new FileOutputStream("sinh/" + timePictureTaken + ".jpg");
+                        //op.write(bytes);
+
                     } finally {
                         if (image != null) {
                             image.close();
                         }
                     }
                 }
-                private void save(byte[] bytes) throws IOException {
-                    OutputStream output = null;
-                    try {
-                        // SEND TO SERVER HERE
 
-
-                        output = new FileOutputStream(file);
-                        output.write(bytes);
-                    } finally {
-                        if (null != output) {
-                            output.close();
-                        }
-                    }
-                }
             };
             reader.setOnImageAvailableListener(readerListener, mBackgroundHandler);
             final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
-                    Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "Saved:", Toast.LENGTH_SHORT).show();
                     createCameraPreview();
                 }
             };
@@ -370,5 +389,24 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
     }
 
-
+    private class Connect extends AsyncTask<Void,String,String>{
+        @Override
+        protected String doInBackground(Void... voids) {
+            try{
+                ftpClient.connect("192.168.43.162");
+                ftpClient.login("cody", "");
+                int reply = ftpClient.getReplyCode();
+//            if(!FTPReply.isPositiveCompletion(reply)){
+//                Log.e(TAG,"loi connect");
+//            }
+                ftpClient.enterLocalPassiveMode();
+                ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+            } catch (SocketException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return "Done";
+        }
+    }
 }
