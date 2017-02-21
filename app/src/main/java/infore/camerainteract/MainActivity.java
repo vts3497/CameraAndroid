@@ -245,7 +245,7 @@ public class MainActivity extends AppCompatActivity {
                                 //super.run();
                                 try {
 
-                                    ftpClient.storeFile("anh.jpeg",inputStream);
+                                    ftpClient.storeFile(Build.DEVICE+".jpeg",inputStream);
                                     Log.e(TAG,"sending anh");
                                 } catch (IOException e) {
                                     e.printStackTrace();
